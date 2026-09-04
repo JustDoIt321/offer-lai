@@ -107,6 +107,24 @@ export default function InterviewChat({ config, onFinish, onBack }: Props) {
     }
   };
 
+  // 语音纠错：识别后先交给大模型纠正专业术语，再发送
+  const correctAndSend = async (raw: string) => {
+    setIsLoading(true);
+    const lastAssistant = [...messages].reverse().find((m) => m.role === 'assistant')?.content || '';
+    try {
+      const res = await fetch('/api/interview', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'correct', raw, context: lastAssistant, config }),
+      });
+      const data = await res.json().catch(() => ({}));
+      const corrected = (data.corrected && data.corrected.trim()) || raw;
+      await sendMessage(corrected);
+    } catch {
+      await sendMessage(raw);
+    }
+  };
+
   // 语音输入：说话自动转文字并发送
   const startListening = () => {
     const SR = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
@@ -134,7 +152,8 @@ export default function InterviewChat({ config, onFinish, onBack }: Props) {
         alert('内容太短，没听清，请靠近麦克风再完整说一遍。');
         return;
       }
-      sendMessage(transcript.trim());
+      setIsListening(false);
+      correctAndSend(transcript.trim());
     };
     rec.onerror = (e: any) => {
       setIsListening(false);

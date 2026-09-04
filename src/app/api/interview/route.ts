@@ -10,6 +10,14 @@ function getClient() {
   });
 }
 
+const CORRECT_SYSTEM_PROMPT = `你是中文语音识别纠错助手，专注技术面试场景。用户的技术术语可能被识别成同音/形近错字，请把识别结果纠正为正确、通顺的中文。
+
+规则：
+1. 只修正明显的同音/形近错字，保留原意和语气，不要增删实质内容、不要改写、不要总结。
+2. 正确还原技术术语，例如："哈希麦普"→"HashMap"，"夸大纳闷/库贝内提斯"→"Kubernetes"，"reddis/红烧"→"Redis"，"买思口语/麦思扣"→"MySQL"，"双塔"→"双塔模型"，"反冲"→"缓存"，"安贝丁"→"Embedding"，"微服务"等按技术语境还原。
+3. 保持中英混读正确，常见英文技术名词保留英文原文（如 HashMap、Redis、Kubernetes、MySQL、Spark、Flink、GC、HTTP、API、JSON 等）。
+4. 只输出纠正后的文本本身，不要解释、不要加引号、不要加前后缀。`;
+
 export async function POST(req: NextRequest) {
   try {
     const { publicUser } = await requireUser(req);
@@ -45,6 +53,30 @@ export async function POST(req: NextRequest) {
 
       const reply = completion.choices[0]?.message?.content || '抱歉，我遇到了一些问题，请重新尝试。';
       return NextResponse.json({ reply });
+    }
+
+    if (action === 'correct') {
+      const raw = body.raw;
+      if (!raw || typeof raw !== 'string') {
+        return NextResponse.json({ error: '缺少待纠错文本' }, { status: 400 });
+      }
+      const context = typeof body.context === 'string' ? body.context : '';
+
+      const completion = await getClient().chat.completions.create({
+        model: 'deepseek-chat',
+        messages: [
+          { role: 'system', content: CORRECT_SYSTEM_PROMPT },
+          {
+            role: 'user',
+            content: `面试官最近的问题：${context || '无'}\n\n待纠错的语音识别结果：${raw}\n\n请输出纠正后的文本。`,
+          },
+        ],
+        temperature: 0.1,
+        max_tokens: 512,
+      });
+
+      const corrected = completion.choices[0]?.message?.content?.trim() || raw;
+      return NextResponse.json({ corrected });
     }
 
     if (action === 'report') {
