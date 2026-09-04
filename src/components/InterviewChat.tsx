@@ -21,7 +21,10 @@ export default function InterviewChat({ config, onFinish, onBack }: Props) {
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [isEnding, setIsEnding] = useState(false);
+  const [isListening, setIsListening] = useState(false);
+  const [ttsEnabled, setTtsEnabled] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const recognitionRef = useRef<any>(null);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -60,6 +63,8 @@ export default function InterviewChat({ config, onFinish, onBack }: Props) {
         };
         setMessages((prev) => [...prev, aiMsg]);
 
+        if (ttsEnabled) speak(data.reply);
+
         // 检查是否结束面试
         if (data.reply.includes('面试到此结束') || data.reply.includes('总结报告')) {
           setIsEnding(true);
@@ -82,6 +87,65 @@ export default function InterviewChat({ config, onFinish, onBack }: Props) {
     e.preventDefault();
     if (!input.trim() || isLoading) return;
     sendMessage(input.trim());
+  };
+
+  // 语音播报：让 AI 面试官"开口说话"
+  const speak = (text: string) => {
+    if (typeof window === 'undefined' || !('speechSynthesis' in window)) return;
+    const clean = text
+      .replace(/\*\*/g, '')
+      .replace(/【[\s\S]*?】/g, '')
+      .replace(/[#*`>\n]/g, ' ');
+    try {
+      window.speechSynthesis.cancel();
+      const u = new SpeechSynthesisUtterance(clean);
+      u.lang = 'zh-CN';
+      u.rate = 1;
+      window.speechSynthesis.speak(u);
+    } catch {
+      // 忽略语音合成异常
+    }
+  };
+
+  // 语音输入：说话自动转文字并发送
+  const startListening = () => {
+    const SR = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    if (!SR) {
+      alert('当前浏览器不支持语音识别，请改用 Chrome、Edge 或 Safari 浏览器。');
+      return;
+    }
+    if (isLoading || isEnding) return;
+
+    const rec = new SR();
+    rec.lang = 'zh-CN';
+    rec.interimResults = false;
+    rec.maxAlternatives = 1;
+    rec.continuous = false;
+
+    rec.onstart = () => setIsListening(true);
+    rec.onresult = (e: any) => {
+      const transcript = e.results?.[0]?.[0]?.transcript;
+      if (transcript && transcript.trim()) {
+        sendMessage(transcript.trim());
+      }
+    };
+    rec.onerror = (e: any) => {
+      setIsListening(false);
+      if (e.error === 'not-allowed' || e.error === 'service-not-allowed') {
+        alert('麦克风权限被拒绝，请在浏览器地址栏授权麦克风后重试。');
+      } else if (e.error !== 'no-speech') {
+        alert('语音识别出错，请重试。');
+      }
+    };
+    rec.onend = () => setIsListening(false);
+
+    recognitionRef.current = rec;
+    rec.start();
+  };
+
+  const stopListening = () => {
+    recognitionRef.current?.stop();
+    setIsListening(false);
   };
 
   const generateReport = async () => {
@@ -126,17 +190,29 @@ export default function InterviewChat({ config, onFinish, onBack }: Props) {
             </p>
           </div>
         </div>
-        {messages.length > 2 && !isEnding && (
+        <div className="flex items-center gap-2">
           <button
-            onClick={() => {
-              setIsEnding(true);
-              sendMessage('面试到此结束，请给我总结报告');
-            }}
-            className="text-xs text-gray-500 hover:text-gray-700 px-3 py-1.5 rounded-lg border border-gray-200"
+            onClick={() => setTtsEnabled((v) => !v)}
+            className={`text-xs px-3 py-1.5 rounded-lg border transition-colors ${
+              ttsEnabled
+                ? 'text-blue-600 border-blue-300 bg-blue-50'
+                : 'text-gray-500 hover:text-gray-700 border-gray-200'
+            }`}
           >
-            结束面试
+            {ttsEnabled ? '🔊 语音播报开' : '🔇 语音播报关'}
           </button>
-        )}
+          {messages.length > 2 && !isEnding && (
+            <button
+              onClick={() => {
+                setIsEnding(true);
+                sendMessage('面试到此结束，请给我总结报告');
+              }}
+              className="text-xs text-gray-500 hover:text-gray-700 px-3 py-1.5 rounded-lg border border-gray-200"
+            >
+              结束面试
+            </button>
+          )}
+        </div>
       </header>
 
       {/* Messages */}
@@ -193,11 +269,27 @@ export default function InterviewChat({ config, onFinish, onBack }: Props) {
       {/* Input */}
       <div className="border-t border-gray-200 bg-white px-4 py-3">
         <form onSubmit={handleSubmit} className="max-w-3xl mx-auto flex gap-2">
+          <button
+            type="button"
+            onClick={isListening ? stopListening : startListening}
+            disabled={isLoading || isEnding}
+            title={isListening ? '停止录音' : '语音输入'}
+            className={`px-3 py-2.5 rounded-xl text-sm transition-colors shrink-0 disabled:opacity-50 ${
+              isListening ? 'bg-red-500 text-white animate-pulse' : 'bg-gray-100 hover:bg-gray-200 text-gray-600'
+            }`}
+          >
+            <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M12 1a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z" />
+              <path strokeLinecap="round" strokeLinejoin="round" d="M19 10v1a7 7 0 0 1-14 0v-1" />
+              <line x1="12" y1="19" x2="12" y2="23" />
+              <line x1="8" y1="23" x2="16" y2="23" />
+            </svg>
+          </button>
           <input
             type="text"
             value={input}
             onChange={(e) => setInput(e.target.value)}
-            placeholder={isLoading ? 'AI 面试官正在思考...' : '输入你的回答...'}
+            placeholder={isListening ? '正在聆听，请说话...' : isLoading ? 'AI 面试官正在思考...' : '输入你的回答，或点击🎤语音回答'}
             disabled={isLoading || isEnding}
             className="flex-1 rounded-xl border border-gray-200 px-4 py-2.5 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 disabled:bg-gray-50 disabled:text-gray-400"
           />
