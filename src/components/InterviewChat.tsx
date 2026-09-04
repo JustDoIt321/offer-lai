@@ -125,9 +125,16 @@ export default function InterviewChat({ config, onFinish, onBack }: Props) {
     rec.onstart = () => setIsListening(true);
     rec.onresult = (e: any) => {
       const transcript = e.results?.[0]?.[0]?.transcript;
-      if (transcript && transcript.trim()) {
-        sendMessage(transcript.trim());
+      if (!transcript) return;
+      // 去掉口语填充词和无意义标点后，判断是否有实际内容
+      const cleaned = transcript
+        .replace(/[嗯啊呃哦噢诶呀哈喽这个那个就是然后]/g, '')
+        .replace(/[，。！？、,.!?\s]/g, '');
+      if (cleaned.length < 4) {
+        alert('内容太短，没听清，请靠近麦克风再完整说一遍。');
+        return;
       }
+      sendMessage(transcript.trim());
     };
     rec.onerror = (e: any) => {
       setIsListening(false);
