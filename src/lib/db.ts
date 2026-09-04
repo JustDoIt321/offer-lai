@@ -43,6 +43,17 @@ db.exec(`
     created_at INTEGER NOT NULL,
     FOREIGN KEY (user_id) REFERENCES users(id)
   );
+
+  CREATE TABLE IF NOT EXISTS payments (
+    id TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL,
+    email TEXT NOT NULL,
+    amount INTEGER NOT NULL DEFAULT 0,
+    days INTEGER NOT NULL DEFAULT 30,
+    note TEXT,
+    created_at INTEGER NOT NULL,
+    FOREIGN KEY (user_id) REFERENCES users(id)
+  );
 `);
 
 export interface User {
@@ -56,6 +67,16 @@ export interface User {
 }
 
 export type PublicUser = Omit<User, 'password_hash'>;
+
+export interface Payment {
+  id: string;
+  user_id: string;
+  email: string;
+  amount: number;
+  days: number;
+  note: string | null;
+  created_at: number;
+}
 
 export function toPublicUser(u: User): PublicUser {
   return {

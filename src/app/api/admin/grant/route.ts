@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { db } from '@/lib/db';
-import { toPublicUser } from '@/lib/db';
+import { db, toPublicUser } from '@/lib/db';
 import { findUserByEmail } from '@/lib/auth';
+import { randomUUID } from 'crypto';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -21,7 +21,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: '无权限' }, { status: 403 });
   }
 
-  const { email, days } = body;
+  const { email, days, amount, note } = body;
   if (!email || typeof email !== 'string') {
     return NextResponse.json({ error: '缺少 email' }, { status: 400 });
   }
@@ -39,6 +39,19 @@ export async function POST(req: NextRequest) {
   db.prepare('UPDATE users SET is_premium = 1, premium_until = ?, free_credits = 0 WHERE id = ?').run(
     newUntil,
     user.id
+  );
+
+  // 录入充值记录
+  db.prepare(
+    'INSERT INTO payments (id, user_id, email, amount, days, note, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)'
+  ).run(
+    randomUUID(),
+    user.id,
+    email.toLowerCase(),
+    Number(amount) >= 0 ? Number(amount) : 0,
+    durationDays,
+    typeof note === 'string' && note.trim() ? note.trim() : null,
+    now
   );
 
   const updated = await findUserByEmail(email);
