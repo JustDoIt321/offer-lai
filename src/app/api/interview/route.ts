@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import OpenAI from 'openai';
 import { buildSystemPrompt, buildReportPrompt } from '@/lib/prompts';
+import { requireUser } from '@/lib/auth';
 
 function getClient() {
   return new OpenAI({
@@ -11,6 +12,11 @@ function getClient() {
 
 export async function POST(req: NextRequest) {
   try {
+    const { publicUser } = await requireUser(req);
+    if (!publicUser) {
+      return NextResponse.json({ error: '请先登录' }, { status: 401 });
+    }
+
     const body = await req.json();
     const { action, config, messages } = body;
 

@@ -2,9 +2,15 @@
 
 import { useState } from 'react';
 import { InterviewConfig, InterviewType } from '@/lib/types';
+import { PublicUser } from '@/lib/client';
 
 interface Props {
   onStart: (config: InterviewConfig) => void;
+  starting: boolean;
+  user: PublicUser | null;
+  premium: boolean;
+  onLogin: () => void;
+  onUpgrade: () => void;
 }
 
 const POSITIONS = [
@@ -13,7 +19,7 @@ const POSITIONS = [
   '产品经理', '技术经理/主管',
 ];
 
-export default function InterviewSetup({ onStart }: Props) {
+export default function InterviewSetup({ onStart, starting, user, premium, onLogin, onUpgrade }: Props) {
   const [config, setConfig] = useState<InterviewConfig>({
     type: 'tech',
     position: '前端工程师',
@@ -23,6 +29,7 @@ export default function InterviewSetup({ onStart }: Props) {
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    if (starting) return;
     onStart(config);
   };
 
@@ -118,14 +125,32 @@ export default function InterviewSetup({ onStart }: Props) {
           {/* 开始按钮 */}
           <button
             type="submit"
-            className="w-full py-3 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-xl transition-colors text-sm"
+            disabled={starting}
+            className="w-full py-3 bg-blue-600 hover:bg-blue-700 disabled:opacity-60 text-white font-medium rounded-xl transition-colors text-sm"
           >
-            🚀 开始模拟面试
+            {starting ? '正在创建面试...' : '🚀 开始模拟面试'}
           </button>
         </form>
 
         <p className="text-center text-xs text-gray-400 mt-4">
-          首次免费体验 3 次 · 之后仅 ¥39/月
+          {!user ? (
+            <>首次注册即可免费体验 3 次 · 之后仅 ¥39/月</>
+          ) : premium ? (
+            <>👑 会员已开通 · 畅享无限面试</>
+          ) : (
+            <>免费剩余 {user.free_credits} 次 · 开通会员解锁无限面试</>
+          )}
+
+          {!user && (
+            <button onClick={onLogin} className="text-blue-600 font-medium ml-1 hover:underline">
+              立即登录
+            </button>
+          )}
+          {user && !premium && (
+            <button onClick={onUpgrade} className="text-blue-600 font-medium ml-1 hover:underline">
+              开通会员
+            </button>
+          )}
         </p>
       </div>
     </div>
